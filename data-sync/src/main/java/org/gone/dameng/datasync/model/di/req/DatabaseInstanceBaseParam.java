@@ -22,6 +22,7 @@ public class DatabaseInstanceBaseParam {
 
     protected String status;
     protected String mode;
+    protected String serviceName;
 
     protected boolean justUpDown;
 }

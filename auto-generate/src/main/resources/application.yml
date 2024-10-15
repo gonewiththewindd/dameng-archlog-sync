@@ -1,7 +1,7 @@
 spring:
   datasource:
     driver-class-name: dm.jdbc.driver.DmDriver
-    url: jdbc:dm://127.0.0.1:52361?schema=PRODUCTION&case
+    url: jdbc:dm://bdc?bdc=127.0.0.1:52361,127.0.0.1:52362&schema=PRODUCTION&loginMode=1
     username: SYSDBA
     password: SYSDBA
     #databaseName: PRODUCTION

@@ -5,9 +5,9 @@ import org.gone.dameng.datasync.model.di.req.DatabaseInstanceBaseParam;
 
 public interface DatabaseInstanceService {
 
-    Boolean isUpDown(DatabaseInstanceBaseParam param);
+    Boolean isUp(DatabaseInstanceBaseParam param);
 
-    Boolean up(DatabaseInstanceBaseParam param);
+    Boolean start(DatabaseInstanceBaseParam param);
 
     Boolean shutdown(DatabaseInstanceBaseParam param);
 

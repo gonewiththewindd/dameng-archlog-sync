@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 public class SystemScriptTemplates {
 
-    private static final Map<String, String> TEMPLATES = new HashMap<String, String>() {{
+    private static final Map<String, String> TEMPLATES = new HashMap<>() {{
 
         Map<String, String> windowsScript = Arrays.stream(WindowsScriptEnums.values())
                 .map(e -> new DefaultKeyValue<>(e.key(), e.getTemplate()))
@@ -22,7 +22,7 @@ public class SystemScriptTemplates {
         Map<String, String> linuxScript = Arrays.stream(LinuxScriptEnums.values())
                 .map(e -> new DefaultKeyValue<>(e.key(), e.getTemplate()))
                 .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue));
-        TEMPLATES.putAll(windowsScript);
+        putAll(windowsScript);
     }};
 
     public static String getScript(SystemTypeEnums systemType, String scriptName, Object... args) {

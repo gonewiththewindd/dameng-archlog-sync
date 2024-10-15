@@ -1,19 +1,23 @@
 package org.gone.dameng.datasync.schedule;
 
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import org.gone.dameng.datasync.enums.SystemTypeEnums;
+import org.gone.dameng.datasync.model.di.DatabaseInstance;
 import org.gone.dameng.datasync.model.di.req.DatabaseInstanceBaseParam;
 import org.gone.dameng.datasync.service.def.ArchiveFileService;
 import org.gone.dameng.datasync.service.def.DatabaseInstanceService;
 import org.gone.dameng.datasync.utils.SshUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.nio.file.Paths;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -31,8 +35,8 @@ public class Scheduler {
     private ResourceLoader resourceLoader;
     @Autowired
     private DatabaseInstanceService databaseInstanceService;
-    @Autowired
-    private RedisTemplate redisTemplate;
+
+    private AtomicBoolean stop = new AtomicBoolean(false);
 
 /*    @Scheduled(fixedDelay = 3 * 1000)
     public void syncArchiveFile() {
@@ -59,67 +63,158 @@ public class Scheduler {
         }
     }*/
 
-    @Scheduled(fixedDelay = 1 * 1000)
+    @Scheduled(fixedDelay = 1 * 10000)
     public void replayArchiveFile() {
         try {
+            if (stop.get()) {
+                return;
+            }
             // 归档日志重演
             if (!lock.tryLock(3, TimeUnit.SECONDS)) {
                 log.warn("[Scheduler]acquire lock failed, skip");
                 return;
             }
-            archiveFileService.sync();
-            archiveFileService.replay(ARCHIVE_FILE_DIR);
+            try {
+                archiveFileService.sync();
+                archiveFileService.replay(ARCHIVE_FILE_DIR);
+            } finally {
+                lock.unlock();
+            }
         } catch (Exception e) {
             log.error("[Scheduler]replay archive file error", e);
-        } finally {
-            lock.unlock();
         }
     }
 
-    //    @Scheduled(fixedDelay = 1 * 1000)
+    public DatabaseInstance primary;
+    public DatabaseInstance standby;
+
+
+    @PostConstruct
+    public void init() {
+
+        String primarySshHost = "127.0.0.1";
+        int primarySshPort = 22;
+        String primarySshUsername = "Administrator";
+        String primarySshPassword = ".12121122.";
+
+        String primaryDatabaseUsername = "SYSDBA";
+        String primaryDatabasePassword = "SYSDBA";
+        String primaryDatabaseHost = "127.0.0.1";
+        String primaryDatabasePort = "52361"; // TODO：端口号最好使用5位数，不然有重复的可能，比如52362端口就包含了523 5236 5362等端口号
+
+        String primaryArchLogFilePath = "D:\\workspace\\dmdbms\\data\\DAMENG\\bak";
+        String primaryArchLogSyncReplayPath = "D:\\workspace\\dmdbms\\sync\\DAMENG";
+
+        primary = new DatabaseInstance();
+        primary.setSshHost(primarySshHost);
+        primary.setSshPort(primarySshPort);
+        primary.setSshUsername(primarySshUsername);
+        primary.setSshPassword(primarySshPassword);
+
+        primary.setDatabaseHost(primaryDatabaseHost);
+        primary.setDatabasePort(primaryDatabasePort);
+        primary.setDatabaseUsername(primaryDatabaseUsername);
+        primary.setDatabasePassword(primaryDatabasePassword);
+
+        primary.setArchLogFilePath(primaryArchLogFilePath);
+        primary.setArchLogSyncReplayPath(primaryArchLogSyncReplayPath);
+
+        String standbySshHost = "127.0.0.1";
+        int standbySshPort = 22;
+        String standbySshUsername = "Administrator";
+        String standbySshPassword = ".12121122.";
+        String standbyDatabaseUsername = "SYSDBA";
+        String standbyDatabasePassword = "SYSDBA";
+        String standbyDatabaseHost = "127.0.0.1";
+        String standbyDatabasePort = "52362";
+        String standbyArchLogFilePath = "D:\\workspace\\dmdbms\\data\\DAMENG2\\bak";
+        String standbyArchLogSyncReplayPath = "D:\\workspace\\dmdbms\\sync\\DAMENG2";
+
+        standby = new DatabaseInstance();
+        standby.setSshHost(standbySshHost);
+        standby.setSshPort(standbySshPort);
+        standby.setSshUsername(standbySshUsername);
+        standby.setSshPassword(standbySshPassword);
+
+        standby.setDatabaseHost(standbyDatabaseHost);
+        standby.setDatabasePort(standbyDatabasePort);
+        standby.setDatabaseUsername(standbyDatabaseUsername);
+        standby.setDatabasePassword(standbyDatabasePassword);
+
+        standby.setArchLogFilePath(standbyArchLogFilePath);
+        standby.setArchLogSyncReplayPath(standbyArchLogSyncReplayPath);
+    }
+
+
+    @Scheduled(fixedDelay = 1 * 1000)
     public void checkDatabaseInstanceStatus() {
         try {
-            String primaryDatabaseHost = "127.0.0.1";
-            int primarySshPort = 22;
-            String primarySshUsername = "Administrator";
-            String primarySshPassword = ".12121122.";
-            String primaryDatabasePort = "52361"; // TODO：端口号最好使用5位数，不然有重复的可能，比如52362端口就包含了523 5236 5362等端口号
-            int defaultTimeoutSeconds = 30;
-            String instanceStatusCommand = "netstat -an | findstr ${port} | findstr LISTENING".replace("${port}", primaryDatabasePort);
-//            String statusCommand = "ss -l | grep ${port}".replace("${port}", primaryDatabasePort);
-
-            String standbyDatabaseUsername = "SYSDBA";
-            String standbyDatabasePassword = "SYSDBA";
-            String standbyDatabaseHost = "127.0.0.1";
-            String standbyDatabasePort = "52362";
-
-            String s = SshUtils.execRemoteCommand(primaryDatabaseHost, primarySshPort, primarySshUsername, primarySshPassword, instanceStatusCommand, defaultTimeoutSeconds);
-            if (StringUtils.isBlank(s)) {
-                log.warn("[Scheduler]remote dm database instance is down, prepare to upgrade standby instance to primary...");
-                // 主从参数置换
-
-                // 标记主库状态为下线
-
+            DatabaseInstanceBaseParam primaryParam = new DatabaseInstanceBaseParam()
+                    .setSystemType(SystemTypeEnums.WINDOWS)
+                    .setSshHost(primary.getSshHost())
+                    .setSshPort(primary.getSshPort())
+                    .setSshUsername(primary.getSshUsername())
+                    .setSshPassword(primary.getSshPassword())
+                    .setDatabasePort(Integer.parseInt(primary.getDatabasePort()));
+            Boolean up = databaseInstanceService.isUp(primaryParam);
+            if (!up) {
+                long startTime = System.currentTimeMillis();
+                log.warn("remote dm database instance is down, prepare to upgrade standby instance to primary...");
                 // 停止同步重演调度任务（定时任务调度需要支持可中途取消）
-
+                stop.set(true);
+                // 最后一次同步
+                lock.lock();
+                log.info("execute the last time sync and replay task");
+                archiveFileService.sync();
+                archiveFileService.replay(ARCHIVE_FILE_DIR);
                 // 关闭实例
-//                databaseInstanceService.shutdown();
-                // 清空归档日志目录
-
-                // 重启实例
-//                databaseInstanceService.up();
-                // 修改模式为primary开始提供服务
                 DatabaseInstanceBaseParam param = new DatabaseInstanceBaseParam()
-                        .setDatabaseHost(primaryDatabaseHost)
-                        .setDatabasePort(Integer.valueOf(standbyDatabasePort))
-                        .setDatabaseUsername(standbyDatabaseUsername)
-                        .setDatabasePassword(standbyDatabasePassword)
+                        .setSystemType(SystemTypeEnums.WINDOWS)
+                        .setSshHost(standby.getSshHost())
+                        .setSshPort(standby.getSshPort())
+                        .setSshUsername(standby.getSshUsername())
+                        .setSshPassword(standby.getSshPassword())
+                        .setDatabaseHost(standby.getDatabaseHost())
+                        .setDatabasePort(Integer.valueOf(standby.getDatabasePort()))
+                        .setDatabaseUsername(standby.getDatabaseUsername())
+                        .setDatabasePassword(standby.getDatabasePassword())
+                        .setServiceName("DmServiceDMSERVER2")
                         .setMode("PRIMARY")
                         .setStatus("OPEN FORCE");
-                Boolean b = databaseInstanceService.alterModeAndStatus(param);
-                log.info("[Scheduler]instance upgrade result:{}", b);
+                Boolean shutdown = databaseInstanceService.shutdown(param);
+                // 清空归档日志目录
+                if (shutdown) {
+                    log.info("database instance '{}' shutdown, prepare to clean arch files", param.getServiceName());
+                    File dir = Paths.get(standby.getArchLogFilePath()).toFile();
+                    for (File file : dir.listFiles()) {
+                        file.delete();
+                    }
+                    log.info("clean arch file exist in dir '{}'", dir.getAbsolutePath());
+                } else {
+                    throw new RuntimeException(String.format("failed to shutdown database instance:'%s'", param.getServiceName()));
+                }
+                // 重启实例
+                Boolean start = databaseInstanceService.start(param);
+                if (!start) {
+                    throw new RuntimeException(String.format("failed to start database instance:'%s'", param.getServiceName()));
+                }
+                log.info("database instance '{}' started, prepare to upgrade mode", param.getServiceName());
+                // 修改模式为primary开始提供服务
+                Boolean alter = databaseInstanceService.alterModeAndStatus(param);
+                if (!alter) {
+                    throw new RuntimeException(String.format("failed to alter database instance '%s' mode and status", param.getServiceName()));
+                }
+
+                //主从参数置换
+                DatabaseInstance temp = standby;
+                standby = primary;
+                primary = temp;
+                // 标记主库状态为下线
+
+                log.info("database instance '{}' upgrade to mode '{}' and status '{}'", param.getServiceName(), param.getMode(), param.getStatus());
+                log.info("database instance '{}' auto switch to primary finish, end in {} ms.", param.getServiceName(), System.currentTimeMillis() - startTime);
             } else {
-                log.info("[Scheduler]remote dm database instance is up...");
+                log.info("remote dm database instance is up...");
                 // 非normal的数据库为什么重启初始状态为mount了，因为如果为open，挂了重启的瞬间可能存在被写入的风险
                 // 检测实例是否下过线
                 // 数据库模式调整为normal

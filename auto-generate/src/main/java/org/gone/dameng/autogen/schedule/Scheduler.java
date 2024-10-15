@@ -29,7 +29,7 @@ public class Scheduler implements ApplicationContextAware {
         this.applicationContext = applicationContext;
     }
 
-    @Scheduled(fixedDelay = 30)
+    @Scheduled(fixedDelay = 3000)
     public void autoGenerate() {
         // 随机表
         Class clazz = TablePicker.pick();

@@ -12,33 +12,86 @@ import org.gone.dameng.datasync.utils.DmSqlUtils;
 import org.gone.dameng.datasync.utils.SshUtils;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.nio.file.Paths;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class DmDatabaseInstanceServiceImpl implements DatabaseInstanceService {
 
     @Override
-    public Boolean isUpDown(DatabaseInstanceBaseParam param) {
+    public Boolean isUp(DatabaseInstanceBaseParam param) {
 
-        String cmd = SystemScriptTemplates.getScript(param.getSystemType(), SystemScriptNameConstants.PORT_LISTENING, param.getDatabasePort());
-        String result = SshUtils.execRemoteCommand(param.getSshHost(), param.getSshPort(), param.getSshUsername(), param.getSshPassword(), cmd, 10);
+        String cmd = SystemScriptTemplates.getScript(
+                param.getSystemType(),
+                SystemScriptNameConstants.PORT_LISTENING,
+                param.getDatabasePort()
+        );
+        String result = SshUtils.execRemoteCommand(
+                param.getSshHost(),
+                param.getSshPort(),
+                param.getSshUsername(),
+                param.getSshPassword(),
+                cmd,
+                10
+        );
         return StringUtils.isNoneBlank(result);
     }
 
     @Override
-    public Boolean up(DatabaseInstanceBaseParam param) {
-        return null;
+    public Boolean start(DatabaseInstanceBaseParam param) {
+
+        String cmd = SystemScriptTemplates.getScript(
+                param.getSystemType(),
+                SystemScriptNameConstants.SERVICE_START,
+                param.getServiceName()
+        );
+        SshUtils.execRemoteCommand(
+                param.getSshHost(),
+                param.getSshPort(),
+                param.getSshUsername(),
+                param.getSshPassword(),
+                cmd,
+                10
+        );
+        try {
+            TimeUnit.MILLISECONDS.sleep(5000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        return this.isUp(param);
     }
 
     @Override
     public Boolean shutdown(DatabaseInstanceBaseParam param) {
-        return null;
+
+        String cmd = SystemScriptTemplates.getScript(
+                param.getSystemType(),
+                SystemScriptNameConstants.SERVICE_STOP,
+                param.getServiceName()
+        );
+        SshUtils.execRemoteCommand(
+                param.getSshHost(),
+                param.getSshPort(),
+                param.getSshUsername(),
+                param.getSshPassword(),
+                cmd,
+                10
+        );
+        try {
+            TimeUnit.MILLISECONDS.sleep(5000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return !this.isUp(param);
     }
 
     @Override

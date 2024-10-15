@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    driver-class-name: dm.jdbc.driver.DmDriver
+    url: jdbc:dm://127.0.0.1:52361?schema=PRODUCTION&case
+    username: SYSDBA
+    password: SYSDBA
+    #databaseName: PRODUCTION
+
+
+#    datasource:
+#      dynamic:
+#        primary: master
+#        strict: false
+#        datasource:
+#          master:
+#            url: jdbc:mysql://xx.xx.xx.xx:3306/dynamic
+#            username: root
+#            password: 123456
+#            driver-class-name: com.mysql.jdbc.Driver
+#          slave_1:
+#            url: jdbc:mysql://xx.xx.xx.xx:3307/dynamic
+#            username: root
+#            password: 123456
+#            driver-class-name: com.mysql.jdbc.Driver
+#          slave_2:
+#            url: ENC(xxxxx)
+#            username: ENC(xxxxx)
+#            password: ENC(xxxxx)
+#            driver-class-name: com.mysql.jdbc.Driver
